@@ -1,0 +1,4 @@
+Flask==3.0.3
+Flask-SocketIO==5.4.0
+SQLAlchemy==2.0.29
+flask-login==0.6.3
