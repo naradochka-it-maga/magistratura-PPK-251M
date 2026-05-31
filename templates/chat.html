@@ -2,28 +2,120 @@
 <html>
 <head>
     <title>Мой Чат</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
-    <div id="chat-container">
-        <div id="messages"></div>
-        <input type="text" id="message-input" placeholder="Введите сообщение...">
-        <button onclick="sendMessage()">Отправить</button>
+    <div class="chat-container">
+        <div class="header">
+            <h1>Чат</h1>
+            <div class="user-info">
+                Вы: <strong>{{ username }}</strong>
+                <a href="{{ url_for('logout') }}">Выйти</a>
+            </div>
+        </div>
+
+        <div class="rooms">
+            <button onclick="switchRoom('general')" class="room-btn active">Общий чат</button>
+            <button onclick="switchRoom('private1')" class="room-btn">Приватный 1</button>
+            <button onclick="switchRoom('private2')" class="room-btn">Приватный 2</button>
+        </div>
+
+        <div id="messages" class="messages">
+            <!-- Здесь будут отображаться сообщения -->
+        </div>
+
+        <div class="input-area">
+            <input type="text" id="message-input" placeholder="Введите сообщение...">
+            <button onclick="sendMessage()">Отправить</button>
+        </div>
     </div>
 
     <script>
         const socket = io();
-        socket.on('message', (data) => {
-            const messagesDiv = document.getElementById('messages');
-            messagesDiv.innerHTML += `<div><strong>${data.user}:</strong> ${data.message}</div>`;
-        });
+        let currentRoom = 'general';
 
+        // Переключение комнат
+        function switchRoom(room) {
+            // Покидаем текущую комнату
+            socket.emit('leave', {room: currentRoom});
+            currentRoom = room;
+            // Входим в новую комнату
+            socket.emit('join', {room: room});
+
+            // Обновляем активный класс кнопок
+            document.querySelectorAll('.room-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Очищаем историю сообщений и загружаем новую
+            document.getElementById('messages').innerHTML = '';
+            loadMessages(room);
+        }
+
+        // Загрузка истории сообщений
+        function loadMessages(room) {
+            fetch(`/messages/${room}`)
+                .then(response => response.json())
+                .then(data => {
+                    const messagesDiv = document.getElementById('messages');
+                    data.messages.forEach(msg => {
+                const date = new Date(msg.timestamp);
+                const formattedDate = date.toLocaleTimeString();
+                messagesDiv.innerHTML += `
+                    <div class="message">
+                <div class="message-header">
+                    <strong>${msg.user}</strong>
+            <span class="timestamp">${formattedDate}</span>
+                </div>
+                <div class="message-content">${msg.message}</div>
+            </div>`;
+            });
+            // Прокручиваем вниз
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        });
+        }
+
+        // Отправка сообщения
         function sendMessage() {
             const input = document.getElementById('message-input');
-            const message = input.value;
-            socket.emit('send_message', {message: message});
-            input.value = '';
+            const message = input.value.trim();
+            if (message) {
+                socket.emit('send_message', {message: message, room: currentRoom});
+                input.value = '';
+            }
         }
+
+        // Обработка входящих сообщений
+        socket.on('message', (data) => {
+            const messagesDiv = document.getElementById('messages');
+            const date = new Date();
+            const formattedDate = date.toLocaleTimeString();
+            messagesDiv.innerHTML += `
+            <div class="message">
+                <div class="message-header">
+                    <strong>${data.user}</strong>
+            <span class="timestamp">${formattedDate}</span>
+                </div>
+                <div class="message-content">${data.message}</div>
+            </div>`;
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        });
+
+        // Статус присоединения/выхода
+        socket.on('status', (data) => {
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML += `<div class="status">${data.msg}</div>`;
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        });
+
+        // При загрузке страницы загружаем сообщения текущей комнаты
+        document.addEventListener('DOMContentLoaded', () => {
+            loadMessages(currentRoom);
+            socket.emit('join', {room: currentRoom});
+        });
     </script>
 </body>
 </html>
+
